@@ -1,4 +1,3 @@
-
 //
 //  main.cpp
 //  Algorithms
@@ -14,6 +13,7 @@
 #include <string>
 #include <algorithm>
 #include <queue>
+#include <random>
 
 struct LCtask {
     int taskID;
@@ -66,7 +66,9 @@ struct task {
     int numPasses = 1;
     std::string executions = "";
     double admissionRate;
-    int queuedCount = 0;
+    int queuedCount = 1;
+    int runtime = 0;
+    int waitTime = 0;
 
     task(int taskID_, int criticalityLevel_, int lowComputationTime_) {
         taskID = taskID_;
@@ -272,7 +274,7 @@ bool conditionA(std::vector<LCtask> lowTaskList, std::vector<HCtask> highTaskLis
            // std::cout << "------------------" << std::endl;
             continue;
         } else {
-            std::cout << "Lemma 1 fail at = " << j << std::endl;
+          //  std::cout << "Lemma 1 fail at = " << j << std::endl;
             return false;
         }
     }
@@ -311,7 +313,7 @@ bool conditionB(std::vector<LCtask> lowTaskList, std::vector<HCtask> highTaskLis
            // std::cout << "------------------" << std::endl;
             continue;
         } else {
-            std::cout << "Lemma 2 fail at = " << j << std::endl;
+          //  std::cout << "Lemma 2 fail at = " << j << std::endl;
             return false;
         }
     }
@@ -341,21 +343,85 @@ bool compareByVirtualDeadline(const task &a, const task &b)
     }
 }
 
+int findTaskToRun(std::vector<task> list) {
+    int shortestDeadline = 0;
+    for(int i = 0; i < list.size(); i++) {
+        if(compareByVirtualDeadline(list.at(i), list.at(shortestDeadline))) {
+            shortestDeadline = i;
+        }
+    }
+    return shortestDeadline;
+}
+
+void print_node(task& p){
+    std::cout << p.taskID << " ";
+}
+
 int main(int argc, const char * argv[]) {
     
-    srand(time_t(0));
+    std::random_device r;
+    std::default_random_engine generator(r()); 
+    std::vector<LCtask> lowTaskQ;
+    std::vector<HCtask> highTaskVector;
+
+    generator.default_seed;
     
     //comp, period, deadline
+    double utilizationBound = 0.9;
+    double totalUtilization = 0.0;
+    int highTasks = 0;
+    int numTasks = 0;
+    std::uniform_real_distribution<double> periodDistribution(20, 150); 
+    std::uniform_real_distribution<double> utilizationDistribution(0.05, .15); 
+    std::uniform_real_distribution<double> admissionDistribution(0.5, .9); 
+    while(totalUtilization < utilizationBound) {
+        if(highTasks < 3) {
+            double utilization = utilizationDistribution(generator);
+            int period = periodDistribution(generator);
+            double lowComp = utilization * period;
+            double highComp = lowComp * 2;
+            HCtask fodderTask(numTasks, lowComp, highComp, period, period, 1.0);
+            totalUtilization += utilization;
+            numTasks++;
+            highTasks++;
+            highTaskVector.push_back(fodderTask);   
+        } else {
+            double utilization = utilizationDistribution(generator);
+            int period = periodDistribution(generator);
+            double lowComp = utilization * period;
+            if(totalUtilization + utilization > utilizationBound) {
+                break;
+            } else {
+                totalUtilization += utilization;
+                numTasks++;
+                LCtask fodderTask(numTasks, lowComp, period, period, admissionDistribution(generator));
+                lowTaskQ.push_back(fodderTask);
+            }
+        }
+    }
 
-    HCtask testTask4(1, 1, 3, 6, 6, 1.0);
+    /*
+    HCtask testTask3(1, 1, 3, 6, 6, 1.0);
     LCtask testTask1(2, 1, 3, 3, 0.5);
     LCtask testTask2(3, 2, 6, 4, 0.4);
     
-    std::vector<LCtask> lowTaskQ;
-    std::vector<HCtask> highTaskVector;
+    LCtask testTask4(4, 12, 86, 86, 0.5);
+    LCtask testTask5(5, 17, 137, 137, 0.5);
+    LCtask testTask6(6, 20, 145, 145, 0.5);
+    HCtask testTask7(7, 6, 12, 51, 51, 1.0);
+    HCtask testTask8(8, 14, 28, 106, 106, 1.0);
+    
+    
     lowTaskQ.push_back(testTask1);
     lowTaskQ.push_back(testTask2);
-    highTaskVector.push_back(testTask4);
+    highTaskVector.push_back(testTask3);
+
+
+    lowTaskQ.push_back(testTask4);
+    lowTaskQ.push_back(testTask5);
+    lowTaskQ.push_back(testTask6);
+    highTaskVector.push_back(testTask7);
+    highTaskVector.push_back(testTask8);*/
     
     double delta = 0.5;
     double q = 0.5;
@@ -365,7 +431,7 @@ int main(int argc, const char * argv[]) {
         delta /= 2;
         for (int i = 0; i < highTaskVector.size(); i++) {
             highTaskVector[i].virtualDeadline = q * highTaskVector[i].deadline;
-            std::cout << "deadline: " << highTaskVector[i].virtualDeadline << std::endl;
+          //  std::cout << "deadline: " << highTaskVector[i].virtualDeadline << std::endl;
         }
         
         bool condA = conditionA(lowTaskQ, highTaskVector);
@@ -379,16 +445,15 @@ int main(int argc, const char * argv[]) {
         } else if (condA == false && condB == true) {
             q = q + delta;
         } else {
-            std::cout << "failure" << std::endl;
+         //   std::cout << "failure" << std::endl;
             break;
         }
     }
     
-    int mode = 1; //0 = low, 1 = high
     std::vector<task> lowModeTaskVector;
     std::vector<task> highModeTaskVector;
     for(int i = 0; i < lowTaskQ.size(); i++) {
-        task x = task(lowTaskQ[i].taskID, 0, lowTaskQ[i].computationTime, 0, lowTaskQ[i].period, lowTaskQ[i].deadline, 0, 0, lowTaskQ[i].admissionRate);
+        task x = task(lowTaskQ[i].taskID, 0, lowTaskQ[i].computationTime, lowTaskQ[i].computationTime, lowTaskQ[i].period, lowTaskQ[i].deadline, lowTaskQ[i].deadline, 0, lowTaskQ[i].admissionRate);
         lowModeTaskVector.push_back(x);
         highModeTaskVector.push_back(x);
     }
@@ -404,132 +469,98 @@ int main(int argc, const char * argv[]) {
     for(int i = 0; i < lowModeTaskVector.size(); i++) {
         std::cout << lowModeTaskVector[i].deadline << std::endl;
     }
+    
     for(int i = 0; i < highModeTaskVector.size(); i++) {
-        std::cout << highModeTaskVector[i].taskID << std::endl;
+         std::cout << "Task " << highModeTaskVector[i].taskID << ": Criticality = " << highModeTaskVector[i].criticalityLevel << ", Computation = " << highModeTaskVector[i].highComputationTime << ", Period = " << highModeTaskVector[i].period << ", Deadline = " << highModeTaskVector[i].deadline << ", Virtual Deadline = " << highModeTaskVector[i].virtualDeadline <<" \n";
     }
-
-    int cap = 20;
+    int lowTaskRunCounter = 0;
+    int cap = 1000;
     int time = 1;
-    double idleTime = 0;
-    double runTime = 0;
-    std::queue<task> queue;
+    int idleTime = 0;
+    int runTime = 0;
+    int lowDeadlineMissCounter = 0;
+    int highDeadlineMissCounter = 0;
     std::vector<task> readyQ;
 
     for(int i = 0; i < highModeTaskVector.size(); i++) {
-        queue.push(highModeTaskVector[i]);
+        if(highModeTaskVector[i].criticalityLevel == 1) {
+            readyQ.push_back(highModeTaskVector[i]);
+        }
     }
     bool switchMode = false;
     taskAdmissionControlProcedure(highModeTaskVector, cap);
 
-    for(int i = 0; i < highModeTaskVector.size(); i++) {
-       std::cout << highModeTaskVector[i].executions << std::endl;
-    }
-
     int runCounter = 0;
     while(time < cap) {
-        std::queue<task> tempQ = queue;
-        for (; !tempQ.empty(); tempQ.pop())
-            std::cout << tempQ.front().taskID << ' ';
+      std::vector<task>::iterator iter = readyQ.begin();
+        for(int i=0; i<readyQ.size(); i++){
+            print_node(readyQ[i]);
+        }
         std::cout << '\n';
-
         std::cout << "time: " << time << std::endl;
-        //task moving
-        if(queue.empty()) {
-            idleTime++;
-            std::cout << "idle" << std::endl;
-        } else {
-            runCounter++;
-            runTime++;
-            std::cout << "running task: " << queue.front().taskID << " counter = " << runCounter << std::endl;
-        }
         //task finishes
+        if(readyQ.empty() == true) {
+            std::cout << "No task in queue" << std::endl;
+            idleTime++;
+        }
+        else {
+            int runningTask = findTaskToRun(readyQ);
+            std::cout << "running task: " << readyQ.at(runningTask).taskID << std::endl;
+            readyQ.at(runningTask).runtime++;
+            for(int i = 0; i < readyQ.size(); i++) {
+                readyQ.at(i).waitTime++;
+            }
+            runTime++;
+            if(readyQ.at(runningTask).criticalityLevel == 0 && readyQ.at(runningTask).runtime % readyQ.at(runningTask).lowComputationTime == 0) {
+                std::cout << "task: " << readyQ.at(runningTask).taskID <<  " finished" << std::endl;
+                lowTaskRunCounter++;
+                for(int j = 0; j < readyQ.size(); j++) {
+                    if(readyQ.at(j).taskID == readyQ.at(runningTask).taskID) {
+                        readyQ.erase(readyQ.begin()+j);
+                    }
+                }
 
-        if(mode == 0) {
-            if(queue.empty()) {
-                std::cout << "No task in queue" << std::endl;
-            }
-            else if(queue.front().criticalityLevel == 0 && runCounter % queue.front().lowComputationTime == 0) {
-                std::cout << "task: " << queue.front().taskID <<  " finished" << std::endl;
-                readyQ.push_back(queue.front());
-                queue.pop();
-                runCounter = 0;
-                if(queue.empty()) {
-                    std::cout << "No task queued" << std::endl;
-                } else {
-                    std::cout << "task: " << queue.front().taskID <<  " queued" << std::endl;
+            } else if(readyQ.at(runningTask).criticalityLevel == 1 && readyQ.at(runningTask).runtime % readyQ.at(runningTask).highComputationTime == 0) {
+                std::cout << "task: " << readyQ.at(runningTask).taskID <<  " finished" << std::endl;
+                for(int j = 0; j < readyQ.size(); j++) {
+                    if(readyQ.at(j).taskID == readyQ.at(runningTask).taskID) {
+                        readyQ.erase(readyQ.begin()+j);
+                    }
                 }
-            }
-            else if(queue.front().criticalityLevel == 1 && runCounter % queue.front().lowComputationTime == 0) {
-                std::cout << "task: " << queue.front().taskID <<  " finished" << std::endl;
-                int randomNum = rand() % 100 + 1;
-                if(randomNum <= queue.front().switchChance * 100) {
-                    std::cout << "task: " << queue.front().taskID <<  " switch to high mode" << std::endl;
-                    switchMode = true;
-                } else {
-                    readyQ.push_back(queue.front());
-                    queue.pop();
-                    runCounter = 0;
-                }
-                if(queue.empty()) {
-                    std::cout << "No task queued" << std::endl;
-                } else {
-                    std::cout << "task: " << queue.front().taskID <<  " queued" << std::endl;
-                }
-            }
-        } else {
-            if(queue.empty()) {
-                std::cout << "No task in queue" << std::endl;
-            }
-            else if(queue.front().criticalityLevel == 0 && runCounter % queue.front().lowComputationTime == 0) {
-                std::cout << "task: " << queue.front().taskID <<  " finished" << std::endl;
-                readyQ.push_back(queue.front());
-                queue.pop();
-                runCounter = 0;
-                
-            }
-            else if(queue.front().criticalityLevel == 1 && runCounter % queue.front().highComputationTime == 0) {
-                std::cout << "task: " << queue.front().taskID <<  " finished" << std::endl;
-                readyQ.push_back(queue.front());
-                queue.pop();
-                runCounter = 0;
-               
             }
         }
-
-        if(switchMode) {
-            //switch from low to high
-            if(mode == 0) {
-                readyQ.clear();
-                while(!queue.empty()) {
-                    queue.pop();
-                }
-                for(int i = 0; i < highModeTaskVector.size(); i++) {
-                    queue.push(highModeTaskVector[i]);
-                }
-                switchMode = false;
-                mode = 1;
-            }
-        }
-        
         //scheduler
         for(int i = 0; i < highModeTaskVector.size(); i++) {
             if(time % highModeTaskVector[i].period == 0) {
                 if(highModeTaskVector[i].criticalityLevel == 0 && highModeTaskVector[i].executions[highModeTaskVector[i].queuedCount] == '0') {
-                    std::cout << "task: " << highModeTaskVector[i].taskID <<  " dropped" << std::endl;
+                    std::cout << "------task: " << highModeTaskVector[i].taskID <<  " dropped------" << std::endl;
                 } else {
-                    std::cout << "task: " <<highModeTaskVector[i].taskID <<  " pushed to queue" << std::endl;
-                    queue.push(highModeTaskVector[i]);
+                    std::cout << "------task: " <<highModeTaskVector[i].taskID <<  " pushed to queue-----" << std::endl;
+                    readyQ.push_back(highModeTaskVector[i]);
                 }
                 highModeTaskVector[i].queuedCount++;
             }
         }
         time++;
-        
+
+        for(int i = 0; i < readyQ.size(); i++) {
+            if(readyQ.at(i).waitTime > readyQ.at(i).deadline) {
+                if(readyQ.at(i).criticalityLevel == 0) {
+                    lowDeadlineMissCounter++;
+                } else {
+                    highDeadlineMissCounter++;
+                }
+                print_node(readyQ[i]);
+                std::cout << "missed deadline." << std::endl;
+            }
+        }
     }
-    double idlePercent = idleTime / (cap - 1);
-    double usePercent = runTime / (cap - 1);
+    double idlePercent = double(idleTime) / (cap - 1);
+    double usePercent = double(runTime) / (cap - 1);
     std::cout << "idle / time: " << idlePercent  <<  std::endl;
     std::cout << "use / time: " << usePercent  <<  std::endl;
-
+    std::cout << "Number of low tasks finished: " << lowTaskRunCounter  <<  std::endl;
+    std::cout << "Number of low task missed deadlines: " << lowDeadlineMissCounter  <<  std::endl;
+    std::cout << "Number of high task missed deadlines: " << highDeadlineMissCounter  <<  std::endl;
     return 0;
 }
