@@ -38,19 +38,26 @@ struct task {
 };
 
 // 0 == lowlow, 1 == lowhigh
-float* lowModeUtilizations(std::vector<task> list) {
-    static float results[2] = {0.0, 0.0};
+float lowModeLowsUtilizations(std::vector<task> list) {
+    float result = 0.0;
     for(int i = 0; i < list.size(); i++) {
         if(list[i].criticalityLevel == 0) {
             float lowTask = list[i].lowComputationTime / list[i].period;
-            results[0] += lowTask;
-        } else {
-            float highTask = list[i].lowComputationTime / list[i].period;
-            results[1] += highTask;
+            result += lowTask;
         }
     }
-    
-    return results;
+    return result;
+}
+
+float lowModeHighsUtilizations(std::vector<task> list) {
+    float result= 0.0;
+    for(int i = 0; i < list.size(); i++) {
+        if(list[i].criticalityLevel == 1) {
+            float highTask = list[i].lowComputationTime / list[i].period;
+            result += highTask;
+        }
+    }
+    return result;
 }
 
 double highModeUtilization(std::vector<task> list) {
@@ -93,7 +100,7 @@ bool compareByDeadline(const task &a, const task &b)
 }
 
 bool compareByVirtualDeadline(const task &a, const task &b)
-{   
+{
     if(a.criticalityLevel == 1 && b.criticalityLevel == 0) {
         return a.virtualDeadline < b.deadline;
     }
@@ -122,21 +129,28 @@ void print_node(task& p){
     std::cout << p.taskID << " ";
 }
 
+float max(float x, float y) {
+    if (x > y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
 int main(int argc, const char * argv[]) {
     // int taskID_, int criticalityLevel_, float lowComputationTime_, float highComputationTime_, float period_, float deadline_, float virtualDeadline_
     
     std::random_device r;
-    std::default_random_engine generator(r()); 
+    std::default_random_engine generator(r());
     std::vector<task> taskVector;
-    generator.default_seed;
     
     //comp, period, deadline
     double utilizationBound = 0.9;
     double totalUtilization = 0.0;
     int highTasks = 0;
     int numTasks = 0;
-    std::uniform_real_distribution<double> periodDistribution(20, 150); 
-    std::uniform_real_distribution<double> utilizationDistribution(0.05, .15); 
+    std::uniform_real_distribution<double> periodDistribution(20, 150);
+    std::uniform_real_distribution<double> utilizationDistribution(0.05, .15);
 
     while(totalUtilization < utilizationBound) {
         if(highTasks < 3) {
@@ -148,7 +162,7 @@ int main(int argc, const char * argv[]) {
             totalUtilization += utilization;
             numTasks++;
             highTasks++;
-            taskVector.push_back(fodderTask);   
+            taskVector.push_back(fodderTask);
         } else {
             double utilization = utilizationDistribution(generator);
             int period = periodDistribution(generator);
@@ -179,13 +193,73 @@ int main(int argc, const char * argv[]) {
     taskVector.push_back(task5);
     taskVector.push_back(task6);
 */
-    float* lowModeResults;
-    lowModeResults = lowModeUtilizations(taskVector);
-    float x = lowModeResults[1] / (1 - lowModeResults[0]);
+    float lowModeLowResult = lowModeLowsUtilizations(taskVector);
+    float lowModeHighResult = lowModeHighsUtilizations(taskVector);
+    float highModeResult = highModeUtilization(taskVector);
+    float x = lowModeLowResult / (1 - lowModeHighResult);
     std::cout << "X: " << x << std::endl;
-    std::cout << "Results: " << lowModeResults[0] << " " << lowModeResults[1] << std::endl;
-    float test = lowModeResults[0] + lowModeResults[1] / x;
+    std::cout << "Results: " << lowModeLowResult << " " << lowModeHighResult << " " << highModeResult << std::endl;
+    float test = lowModeLowResult + lowModeHighResult / x;
     std::cout << "Test: " << test << std::endl;
+    float lowerBound = utilizationBound - 0.05;
+    float maxValue = max((lowModeLowResult + lowModeHighResult), highModeResult);
+    std::cout << lowerBound << " <= " << maxValue << " <= " << utilizationBound << std::endl;
+    bool wrong = false;
+    if((lowerBound <= maxValue) && (maxValue <= utilizationBound)) {
+        wrong = false;
+    } else {
+        wrong = true;
+    }
+    
+    while(wrong) {
+        std::default_random_engine generator(r());
+        std::cout << "Generating new task set " << std::endl;
+        taskVector.clear();
+        double totalUtilization = 0.0;
+        int highTasks = 0;
+        int numTasks = 0;
+        
+        while(totalUtilization < utilizationBound) {
+            if(highTasks < 3) {
+                double utilization = utilizationDistribution(generator);
+                int period = periodDistribution(generator);
+                double lowComp = utilization * period;
+                double highComp = lowComp * 2;
+                task fodderTask(numTasks, 1, lowComp, highComp, period, period, period);
+                totalUtilization += utilization;
+                numTasks++;
+                highTasks++;
+                taskVector.push_back(fodderTask);
+            } else {
+                double utilization = utilizationDistribution(generator);
+                int period = periodDistribution(generator);
+                double lowComp = utilization * period;
+                if(totalUtilization + utilization > utilizationBound) {
+                    break;
+                } else {
+                    totalUtilization += utilization;
+                    numTasks++;
+                    task fodderTask(numTasks, 0, lowComp, lowComp, period, period, period);
+                    taskVector.push_back(fodderTask);
+                }
+            }
+        }
+        float lowModeLowResult = lowModeLowsUtilizations(taskVector);
+        float lowModeHighResult = lowModeHighsUtilizations(taskVector);
+        float highModeResult = highModeUtilization(taskVector);
+        float x = lowModeHighResult / (1 - lowModeLowResult);
+        std::cout << "X: " << x << std::endl;
+        std::cout << "Results: " << lowModeLowResult << " " << lowModeHighResult << " " << highModeResult << std::endl;
+        float test = lowModeLowResult + lowModeHighResult / x;
+        std::cout << "Test: " << test << std::endl;
+        float maxValue = max(lowModeLowResult + lowModeHighResult, highModeResult);
+        std::cout << lowerBound << " <= " << maxValue << " <= " << utilizationBound << std::endl;
+        if((lowerBound <= maxValue) && (maxValue <= utilizationBound)) {
+            wrong = false;
+        } else {
+            wrong = true;
+        }
+    }
 
     for(int i = 0; i < taskVector.size(); i++) {
         if(taskVector[i].criticalityLevel == 1) {
@@ -193,13 +267,13 @@ int main(int argc, const char * argv[]) {
         }
     }
     sort(taskVector.begin(), taskVector.end(), compareByVirtualDeadline);
-    float omega = math7(taskVector, lowModeResults[0], lowModeResults[1]);
+    float omega = math7(taskVector, lowModeLowResult, lowModeHighResult);
     std::cout << "Omega: " << omega << std::endl;
     if(omega <= 0) {
-        float execess = math6(taskVector, lowModeResults[0], lowModeResults[1], x);
+        float execess = math6(taskVector, lowModeLowResult, lowModeHighResult, x);
         std::cout << execess << std::endl;
-        float difference = (lowModeResults[0] + execess);
-        float scale = lowModeResults[0] / difference;
+        float difference = (lowModeLowResult + execess);
+        float scale = lowModeLowResult / difference;
         for(int i = 0; i < taskVector.size(); i++) {
             if(taskVector[i].criticalityLevel == 0) {
                 taskVector[i].period = ceil(taskVector[i].period * scale);
@@ -217,8 +291,7 @@ int main(int argc, const char * argv[]) {
     }
     std::cout << "\n-----\n" << std::endl;
 
-    int mode = 1; //0 = low, 1 = high
-    int cap = 200;
+    int cap = 300;
     int time = 1;
     double idleTime = 0;
     double runTime = 0;
@@ -231,7 +304,6 @@ int main(int argc, const char * argv[]) {
         readyQ.push_back(taskVector[i]);
     }
     while(time < cap) {
-        std::vector<task>::iterator iter = readyQ.begin();
         for(int i=0; i<readyQ.size(); i++){
             print_node(readyQ[i]);
         }
@@ -272,8 +344,18 @@ int main(int argc, const char * argv[]) {
         //scheduler
         for(int i = 0; i < taskVector.size(); i++) {
             if(time % int(taskVector[i].period) == 0) {
-                readyQ.push_back(taskVector[i]);
-                std::cout << "task: " << taskVector[i].taskID <<  " pushed" << std::endl;
+                bool isQueued = false;
+                for(int j = 0; j < readyQ.size(); j++) {
+                    if(taskVector[i].taskID == readyQ.at(j).taskID) {
+                        isQueued = true;
+                    }
+                }
+                if(!isQueued) {
+                    readyQ.push_back(taskVector[i]);
+                    std::cout << "task: " << taskVector[i].taskID <<  " pushed" << std::endl;
+                } else {
+                    std::cout << "task: " << taskVector[i].taskID <<  " skipped" << std::endl;
+                }
             }
         }
 
